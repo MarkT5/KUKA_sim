@@ -4,19 +4,21 @@ import pygame as pg
 
 
 class MapEditor(Sprite):
-    def __init__(self, par_surf, /, map_shape=None, robot=None, **kwargs):
+    def __init__(self, par_surf, /, map_shape=None, robot=None, sim=True, **kwargs):
         super().__init__(par_surf, **kwargs)
         self.map_shape = map_shape
         self.robot = robot
+        self.in_sim_mode = sim
         self.discrete_per_pixel_width = self.map_shape[0] / self.width
         self.discrete_per_pixel_height = self.map_shape[1] / self.height
         self.discrete_wh = self.width / self.map_shape[0], self.height / self.map_shape[1]
         self.full_map = np.zeros(self.map_shape).astype(np.uint16)
         self.brush = 5
-        self.robot_pos = robot.increment
-        self.draw_robot = False
+        if self.robot:
+            self.robot_pos = robot.increment
         self.old_wheel = 0
         self.overlay = np.zeros(map_shape)
+        self.workspace = self.get_prepared_surface()
 
     def change_brush_size(self, val):
         self.brush = int(val)
@@ -36,9 +38,11 @@ class MapEditor(Sprite):
         pass
 
     def update(self):
-        self.robot.update()
-        self.overlay = np.zeros(self.map_shape)
-        self.robot.update_overlay(self.overlay)
+        if self.robot:
+            self.robot.update()
+            self.overlay = np.zeros(self.map_shape)
+            self.robot.update_overlay(self.overlay)
+        self.workspace = self.get_prepared_surface()
         delta = self.old_wheel - self.par_surf.mouse_wheel_pos
         self.brush = max(1, min(20, self.brush + delta))
         self.old_wheel = self.par_surf.mouse_wheel_pos
@@ -74,12 +78,7 @@ class MapEditor(Sprite):
         return (x, y, *self.discrete_wh)
 
     def get_prepared_surface(self):
-        return pg.surfarray.make_surface((self.full_map - 1) * -255 + self.overlay)
+        return pg.transform.scale(pg.surfarray.make_surface((self.full_map - 1) * -255 + self.overlay), (self.width, self.height))
 
     def draw(self):
-        self.surface.blit(
-                    pg.transform.scale(
-                        self.get_prepared_surface(), (self.width, self.height)), (0, 0))
-
-        if self.draw_robot:
-            pg.draw.circle(self.surface, (0, 255, 0), self.robot_pos[:2], 30)
+        self.surface.blit(self.workspace, (0, 0))
